@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { createAppointment, getBookedSlots } from '@/entities/appointment/api/appointment-api'
 import { getAvailability } from '@/entities/physiotherapist/api/physiotherapist-api'
+import { listClinicPhysiotherapists } from '@/entities/clinic-physiotherapist/api/clinic-physiotherapist-api'
 import { getPhysioOwnedPatients } from '@/entities/patient/api/patient-api'
 import { queryKeys } from '@/shared/api/query-keys'
 import { Button } from '@/shared/ui/button'
@@ -30,6 +31,7 @@ export function PhysioCreateAppointmentForm({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [patientId, setPatientId] = useState(preselectedPatientId ?? '')
+  const [clinicPhysiotherapistId, setClinicPhysiotherapistId] = useState('')
   const [modality, setModality] = useState<AppointmentModality>('telehealth')
   const [date, setDate] = useState(preselectedDate ?? '')
   const [time, setTime] = useState(preselectedTime ?? '')
@@ -47,10 +49,16 @@ export function PhysioCreateAppointmentForm({
     queryFn: () => getAvailability(physiotherapistId),
   })
 
+  const staffQuery = useQuery({
+    queryKey: queryKeys.clinicPhysiotherapists(physiotherapistId),
+    queryFn: () => listClinicPhysiotherapists(physiotherapistId, { activeOnly: true }),
+    enabled: !!physiotherapistId,
+  })
+
   const bookedSlotsQuery = useQuery({
-    queryKey: ['booked-slots', physiotherapistId, date],
-    queryFn: () => getBookedSlots(physiotherapistId, date),
-    enabled: !!date,
+    queryKey: ['booked-slots', clinicPhysiotherapistId, date],
+    queryFn: () => getBookedSlots(clinicPhysiotherapistId, date),
+    enabled: !!date && !!clinicPhysiotherapistId,
   })
 
   const selectedDate = date ? new Date(date + 'T12:00:00') : null
@@ -63,8 +71,9 @@ export function PhysioCreateAppointmentForm({
     [availabilityQuery.data, dayOfWeek, modality]
   )
 
-  const availableSlots = dayAvailability.flatMap((a) =>
-    generateTimeSlots(a.start_time, a.end_time, duration, bookedSlotsQuery.data ?? [])
+  const availableSlots = (dayAvailability.length
+    ? dayAvailability.flatMap((a) => generateTimeSlots(a.start_time, a.end_time, duration, bookedSlotsQuery.data ?? []))
+    : generateTimeSlots('07:00', '21:00', duration, bookedSlotsQuery.data ?? [])
   )
 
   // Allow agenda-prefilled times even outside configured availability slots
@@ -77,6 +86,7 @@ export function PhysioCreateAppointmentForm({
       return createAppointment({
         patientId,
         physiotherapistId,
+        clinicPhysiotherapistId,
         modality,
         scheduledAt: scheduledAt.toISOString(),
         homeAddress: modality === 'home_visit' ? homeAddress || undefined : undefined,
@@ -97,7 +107,7 @@ export function PhysioCreateAppointmentForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{pt.physio.newAppointment}</CardTitle>
+        <CardTitle>{pt.clinic.singleAppointment}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
@@ -107,6 +117,17 @@ export function PhysioCreateAppointmentForm({
             <SelectContent>
               {(patientsQuery.data ?? []).map((p) => (
                 <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>{pt.clinic.sessionTherapist}</Label>
+          <Select value={clinicPhysiotherapistId} onValueChange={setClinicPhysiotherapistId}>
+            <SelectTrigger><SelectValue placeholder={pt.common.select} /></SelectTrigger>
+            <SelectContent>
+              {(staffQuery.data ?? []).map((staff) => (
+                <SelectItem key={staff.id} value={staff.id}>{staff.full_name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -175,7 +196,7 @@ export function PhysioCreateAppointmentForm({
         </div>
         {mutation.error && <p className="text-sm text-red-600">{(mutation.error as Error).message}</p>}
         <Button
-          disabled={!patientId || !date || !time || mutation.isPending}
+          disabled={!patientId || !clinicPhysiotherapistId || !date || !time || mutation.isPending}
           onClick={() => mutation.mutate()}
         >
           {mutation.isPending ? pt.common.loading : pt.physio.scheduleAppointment}

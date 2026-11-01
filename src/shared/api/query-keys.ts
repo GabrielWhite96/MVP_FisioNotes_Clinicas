@@ -46,4 +46,6 @@ export const queryKeys = {
   clinicPhysiotherapist: (id: string) => ['clinic-physiotherapist', id] as const,
   patientAssignments: (patientId: string) => ['patient-assignments', patientId] as const,
   staffAssignments: (staffId: string) => ['staff-assignments', staffId] as const,
+  patientAttendance: (patientId: string) => ['patient-attendance', patientId] as const,
+  staffAttendance: (staffId: string) => ['staff-attendance', staffId] as const,
 }

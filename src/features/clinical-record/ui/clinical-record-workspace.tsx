@@ -8,7 +8,6 @@ import {
 } from '@/entities/clinical-record/api/clinical-record-api'
 import { getPatientWithProfile } from '@/entities/patient/api/patient-api'
 import { listClinicPhysiotherapists } from '@/entities/clinic-physiotherapist/api/clinic-physiotherapist-api'
-import { getCurrentPatientAssignment } from '@/entities/patient-assignment/api/patient-assignment-api'
 import type { AssessmentStructuredData } from '@/entities/clinical-record/model/assessment-schema'
 import { emptyAssessmentData } from '@/entities/clinical-record/model/defaults'
 import { queryKeys } from '@/shared/api/query-keys'
@@ -107,12 +106,6 @@ export function ClinicalRecordWorkspace({
     enabled: !!physiotherapistId,
   })
 
-  const currentAssignmentQuery = useQuery({
-    queryKey: [...queryKeys.patientAssignments(patientId), 'current'],
-    queryFn: () => getCurrentPatientAssignment(patientId),
-    enabled: !!patientId,
-  })
-
   const mode: Mode = useMemo(() => {
     if (modeOverride) return modeOverride
     if (hasInitialQuery.data === false) return 'initial'
@@ -137,7 +130,7 @@ export function ClinicalRecordWorkspace({
 
   const summaryData = parseAssessment(latestAssessmentQuery.data?.structured_data)
   const performedBy = performedById && performedById !== 'none' ? performedById : null
-  const responsibleName = currentAssignmentQuery.data?.clinic_physiotherapists?.full_name ?? ''
+  const responsibleName = staffQuery.data?.find((staff) => staff.id === performedBy)?.full_name ?? ''
 
   if (hasInitialQuery.isLoading || patientQuery.isLoading) {
     return <LoadingSpinner className="mx-auto h-8 w-8" />

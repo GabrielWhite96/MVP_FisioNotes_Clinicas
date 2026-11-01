@@ -142,6 +142,7 @@ export interface Database {
           id: string
           patient_id: string
           physiotherapist_id: string
+          clinic_physiotherapist_id: string | null
           modality: AppointmentModality
           status: AppointmentStatus
           scheduled_at: string
@@ -157,6 +158,7 @@ export interface Database {
         Insert: {
           patient_id: string
           physiotherapist_id: string
+          clinic_physiotherapist_id?: string | null
           modality: AppointmentModality
           status?: AppointmentStatus
           scheduled_at: string

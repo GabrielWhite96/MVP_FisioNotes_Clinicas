@@ -1,9 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { listStaffAttendance } from '@/entities/appointment/api/appointment-api'
+import {
+  filterSessionsByPeriod,
+  groupAttendanceByParty,
+} from '@/entities/appointment/model/attendance-report'
 import { getClinicPhysiotherapistById } from '@/entities/clinic-physiotherapist/api/clinic-physiotherapist-api'
-import { listStaffAssignments } from '@/entities/patient-assignment/api/patient-assignment-api'
-import { daysAgoIso, filterAssignmentsByPeriod, todayIso } from '@/entities/patient-assignment/model/period'
+import { daysAgoIso, todayIso } from '@/entities/patient-assignment/model/period'
 import { downloadAssignmentReportPdf } from '@/features/assignment-report/pdf/assignment-report-pdf'
 import { AssignmentReportToolbar } from '@/features/assignment-report/ui/assignment-report-toolbar'
 import { queryKeys } from '@/shared/api/query-keys'
@@ -11,7 +15,6 @@ import { pt } from '@/shared/config/i18n/pt'
 import { ROUTES } from '@/shared/config/routes'
 import { formatDate, formatDateTime } from '@/shared/lib/dates'
 import { Button } from '@/shared/ui/button'
-import { Badge } from '@/shared/ui/badge'
 import { EmptyState, ErrorState, LoadingSpinner } from '@/shared/ui/states'
 
 export function StaffAssignmentReportPage() {
@@ -27,24 +30,38 @@ export function StaffAssignmentReportPage() {
     queryFn: () => getClinicPhysiotherapistById(id!),
     enabled: !!id,
   })
-  const assignmentsQuery = useQuery({
-    queryKey: queryKeys.staffAssignments(id ?? ''),
-    queryFn: () => listStaffAssignments(id!),
+  const attendanceQuery = useQuery({
+    queryKey: queryKeys.staffAttendance(id ?? ''),
+    queryFn: () => listStaffAttendance(id!),
     enabled: !!id,
   })
 
-  const rows = useMemo(() => {
-    return filterAssignmentsByPeriod(
-      (assignmentsQuery.data ?? []).map((item) => ({
+  const groups = useMemo(() => {
+    const sessions = filterSessionsByPeriod(
+      (attendanceQuery.data ?? []).map((item) => ({
         id: item.id,
-        name: item.patients?.full_name ?? '—',
-        startedOn: item.started_on,
-        endedOn: item.ended_on,
+        scheduledAt: item.scheduled_at,
+        durationMinutes: item.duration_minutes,
+        status: item.status,
+        groupId: item.patient_id,
+        groupName: item.patient?.full_name ?? item.patient?.profiles?.full_name ?? '—',
       })),
       from || null,
       to || null,
     )
-  }, [assignmentsQuery.data, from, to])
+    return groupAttendanceByParty(sessions)
+  }, [attendanceQuery.data, from, to])
+
+  const rows = groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    startedOn: group.firstAt,
+    endedOn: group.lastAt,
+    weekdayLabel: group.weekdayLabel,
+    timesLabel: group.timesLabel,
+    sessionCount: group.sessionCount,
+    sessions: group.sessions.map((session) => ({ id: session.id, scheduledAt: session.scheduledAt })),
+  }))
 
   const periodLabel = from || to
     ? `${from ? formatDate(from) : '…'} — ${to ? formatDate(to) : pt.clinic.ongoing}`
@@ -79,7 +96,7 @@ export function StaffAssignmentReportPage() {
     }
   }
 
-  if (staffQuery.isLoading || assignmentsQuery.isLoading) {
+  if (staffQuery.isLoading || attendanceQuery.isLoading) {
     return <LoadingSpinner className="mx-auto mt-8 h-8 w-8" />
   }
   if (!staffQuery.data) return <ErrorState message="Fisioterapeuta não encontrado" />
@@ -111,16 +128,19 @@ export function StaffAssignmentReportPage() {
       {!rows.length ? (
         <EmptyState title={pt.clinic.emptyAssignments} description={pt.clinic.emptyAssignmentsHint} />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {rows.map((row) => (
-            <div key={row.id} className="flex items-center justify-between rounded-lg border p-4">
-              <div>
-                <p className="font-medium">{row.name}</p>
-                <p className="text-sm text-[var(--color-muted-foreground)]">
-                  {formatDate(row.startedOn)} — {row.endedOn ? formatDate(row.endedOn) : pt.clinic.ongoing}
-                </p>
-              </div>
-              {!row.endedOn && <Badge variant="success">{pt.clinic.currentPeriod}</Badge>}
+            <div key={row.id} className="rounded-lg border p-4">
+              <p className="font-medium">{row.name}</p>
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                {pt.clinic.attendancePeriod}: {formatDate(row.startedOn)} — {formatDate(row.endedOn ?? row.startedOn)}
+              </p>
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                {pt.clinic.daysAndTimes}: {row.weekdayLabel} · {row.timesLabel}
+              </p>
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                {row.sessionCount} {pt.clinic.sessionsCount}
+              </p>
             </div>
           ))}
         </div>

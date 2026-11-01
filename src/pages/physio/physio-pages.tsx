@@ -29,6 +29,7 @@ import { ClinicalStatusActions } from '@/features/patients/ui/clinical-status-ac
 import { PatientInvitePanel } from '@/features/patients/ui/patient-invite-panel'
 import { PatientAssignmentPanel, PatientResponsibleSummary } from '@/features/patient-assignment/ui/patient-assignment-panel'
 import { PhysioCreateAppointmentForm } from '@/features/appointments/ui/physio-create-appointment-form'
+import { ClinicBulkScheduleForm } from '@/features/appointments/ui/clinic-bulk-schedule-form'
 import { PhysioAgenda } from '@/features/physio-agenda/ui/physio-agenda'
 import { PatientBillingPanel } from '@/features/billing/ui/patient-billing-panel'
 import { PhysioBillingOverview } from '@/features/billing/ui/physio-billing-overview'
@@ -497,9 +498,9 @@ export function PhysioPatientsPage() {
                   <Badge variant={patient.account_status === 'active' ? 'success' : 'outline'}>
                     {ACCOUNT_STATUS_LABELS[patient.account_status]}
                   </Badge>
-                  {patient.responsible && (
-                    <Badge variant="outline">{patient.responsible.full_name}</Badge>
-                  )}
+                  {patient.therapists.map((therapist) => (
+                    <Badge key={therapist.id} variant="outline">{therapist.full_name}</Badge>
+                  ))}
                 </div>
               </div>
               <ChevronRight className="h-5 w-5" />
@@ -776,6 +777,10 @@ export function PhysioAppointmentNewPage() {
     
       <div className="mx-auto max-w-2xl space-y-6">
         <h1 className="page-title">{pt.physio.newAppointment}</h1>
+        <ClinicBulkScheduleForm
+          practiceId={physioQuery.data.id}
+          preselectedPatientId={preselectedPatientId}
+        />
         <PhysioCreateAppointmentForm
           physiotherapistId={physioQuery.data.id}
           preselectedPatientId={preselectedPatientId}

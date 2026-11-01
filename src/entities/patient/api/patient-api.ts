@@ -4,7 +4,7 @@ import type { Patient, PatientAccountStatus, PatientClinicalStatus } from '@/sha
 
 export type PhysioPatient = Patient & {
   profiles: { id: string; full_name: string; phone: string | null; avatar_url: string | null } | null
-  responsible: { id: string; full_name: string } | null
+  therapists: { id: string; full_name: string }[]
 }
 
 export async function getPatientByProfileId(profileId: string) {
@@ -49,10 +49,8 @@ export async function getPhysioOwnedPatients(physiotherapistId: string) {
     .select(`
       *,
       profiles(id, full_name, phone, avatar_url),
-      patient_therapist_assignments (
-        id,
-        started_on,
-        ended_on,
+      appointments (
+        status,
         clinic_physiotherapists ( id, full_name )
       )
     `)
@@ -61,16 +59,18 @@ export async function getPhysioOwnedPatients(physiotherapistId: string) {
   if (error) throw error
 
   return (data ?? []).map((row) => {
-    const assignments = Array.isArray(row.patient_therapist_assignments)
-      ? row.patient_therapist_assignments
-      : []
-    const current = assignments.find((item: { ended_on?: string | null }) => !item.ended_on)
-    const staff = current?.clinic_physiotherapists as { id: string; full_name: string } | { id: string; full_name: string }[] | null | undefined
-    const responsible = Array.isArray(staff) ? staff[0] ?? null : staff ?? null
-    const { patient_therapist_assignments: _assignments, ...patient } = row
+    const appointments = Array.isArray(row.appointments) ? row.appointments : []
+    const therapists = new Map<string, { id: string; full_name: string }>()
+    for (const appointment of appointments) {
+      if (appointment.status === 'cancelled') continue
+      const staff = appointment.clinic_physiotherapists as { id: string; full_name: string } | { id: string; full_name: string }[] | null | undefined
+      const member = Array.isArray(staff) ? staff[0] ?? null : staff ?? null
+      if (member?.id) therapists.set(member.id, member)
+    }
+    const { appointments: _appointments, ...patient } = row
     return {
       ...patient,
-      responsible: responsible ? { id: responsible.id, full_name: responsible.full_name } : null,
+      therapists: [...therapists.values()],
     }
   }) as PhysioPatient[]
 }

@@ -8,12 +8,15 @@ import {
   getClinicPhysiotherapistById,
   listClinicPhysiotherapists,
 } from '@/entities/clinic-physiotherapist/api/clinic-physiotherapist-api'
-import { listStaffAssignments } from '@/entities/patient-assignment/api/patient-assignment-api'
+import { listStaffAttendance } from '@/entities/appointment/api/appointment-api'
+import {
+  groupAttendanceByParty,
+} from '@/entities/appointment/model/attendance-report'
 import { ClinicPhysiotherapistForm } from '@/features/clinic-physiotherapists/ui/clinic-physiotherapist-form'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import { queryKeys } from '@/shared/api/query-keys'
 import { pt } from '@/shared/config/i18n/pt'
-import { CLINICAL_STATUS_LABELS, ROUTES } from '@/shared/config/routes'
+import { ROUTES } from '@/shared/config/routes'
 import { formatDate } from '@/shared/lib/dates'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
@@ -140,11 +143,21 @@ export function PhysioStaffDetailPage() {
     queryFn: () => getClinicPhysiotherapistById(id!),
     enabled: !!id,
   })
-  const assignmentsQuery = useQuery({
-    queryKey: queryKeys.staffAssignments(id ?? ''),
-    queryFn: () => listStaffAssignments(id!),
+  const attendanceQuery = useQuery({
+    queryKey: queryKeys.staffAttendance(id ?? ''),
+    queryFn: () => listStaffAttendance(id!),
     enabled: !!id,
   })
+  const attendedPatients = groupAttendanceByParty(
+    (attendanceQuery.data ?? []).map((item) => ({
+      id: item.id,
+      scheduledAt: item.scheduled_at,
+      durationMinutes: item.duration_minutes,
+      status: item.status,
+      groupId: item.patient_id,
+      groupName: item.patient?.full_name ?? item.patient?.profiles?.full_name ?? 'Paciente',
+    })),
+  )
 
   if (!physioQuery.data || staffQuery.isLoading) {
     return <LoadingSpinner className="mx-auto mt-8 h-8 w-8" />
@@ -181,25 +194,25 @@ export function PhysioStaffDetailPage() {
           <CardTitle className="text-base">{pt.clinic.patientsAttended}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {assignmentsQuery.isLoading && <LoadingSpinner />}
-          {!assignmentsQuery.data?.length && !assignmentsQuery.isLoading && (
+          {attendanceQuery.isLoading && <LoadingSpinner />}
+          {!attendedPatients.length && !attendanceQuery.isLoading && (
             <p className="text-sm text-[var(--color-muted-foreground)]">{pt.clinic.emptyAssignments}</p>
           )}
-          {(assignmentsQuery.data ?? []).map((assignment) => (
-            <div key={assignment.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+          {attendedPatients.map((group) => (
+            <div key={group.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
               <div>
-                <p className="font-medium">{assignment.patients?.full_name ?? 'Paciente'}</p>
+                <p className="font-medium">{group.name}</p>
                 <p className="text-sm text-[var(--color-muted-foreground)]">
-                  {formatDate(assignment.started_on)}
+                  {formatDate(group.firstAt)}
                   {' — '}
-                  {assignment.ended_on ? formatDate(assignment.ended_on) : pt.clinic.ongoing}
+                  {formatDate(group.lastAt)}
+                  {' · '}
+                  {group.weekdayLabel}
+                  {' · '}
+                  {group.timesLabel}
                 </p>
               </div>
-              {assignment.patients && (
-                <Badge variant="secondary">
-                  {CLINICAL_STATUS_LABELS[assignment.patients.clinical_status]}
-                </Badge>
-              )}
+              <Badge variant="secondary">{group.sessionCount} {pt.clinic.sessionsCount}</Badge>
             </div>
           ))}
         </CardContent>

@@ -3,9 +3,19 @@ import { assertPracticeWritable } from '@/entities/physiotherapist/model/subscri
 import type { AppointmentModality, AppointmentStatus } from '@/shared/types/database'
 import { syncAppointmentToGoogleCalendar } from '@/entities/google-calendar/api/google-calendar-api'
 
+const APPOINTMENT_SELECT = `
+  *,
+  patient:patients(id, profile_id, full_name, city, province, profiles:profiles(full_name, phone)),
+  physiotherapist:physiotherapists(id, profile_id, profiles:profiles(full_name, phone)),
+  clinic_physiotherapist:clinic_physiotherapists(id, full_name, license_number)
+`
+
+const HISTORY_STATUSES: AppointmentStatus[] = ['scheduled', 'confirmed', 'completed', 'no_show']
+
 export interface CreateAppointmentInput {
   patientId: string
   physiotherapistId: string
+  clinicPhysiotherapistId: string
   modality: AppointmentModality
   scheduledAt: string
   homeAddress?: string
@@ -20,11 +30,7 @@ export async function getAppointments(filters?: {
 }) {
   let query = supabase
     .from('appointments')
-    .select(`
-      *,
-      patient:patients(id, profile_id, full_name, city, province, profiles:profiles(full_name, phone)),
-      physiotherapist:physiotherapists(id, profile_id, profiles:profiles(full_name, phone))
-    `)
+    .select(APPOINTMENT_SELECT)
     .order('scheduled_at', { ascending: true })
 
   if (filters?.patientId) query = query.eq('patient_id', filters.patientId)
@@ -40,6 +46,7 @@ export type AppointmentWithRelations = {
   id: string
   patient_id: string
   physiotherapist_id: string
+  clinic_physiotherapist_id: string | null
   modality: AppointmentModality
   status: AppointmentStatus
   scheduled_at: string
@@ -61,6 +68,11 @@ export type AppointmentWithRelations = {
     profile_id: string
     profiles?: { full_name: string; phone: string | null } | null
   } | null
+  clinic_physiotherapist?: {
+    id: string
+    full_name: string
+    license_number: string | null
+  } | null
 }
 
 export async function getAppointmentById(id: string) {
@@ -69,7 +81,8 @@ export async function getAppointmentById(id: string) {
     .select(`
       *,
       patient:patients(*, profiles:profiles(full_name, phone)),
-      physiotherapist:physiotherapists(*, profiles:profiles(full_name, phone))
+      physiotherapist:physiotherapists(*, profiles:profiles(full_name, phone)),
+      clinic_physiotherapist:clinic_physiotherapists(id, full_name, license_number)
     `)
     .eq('id', id)
     .single()
@@ -91,6 +104,7 @@ export async function createAppointment(input: CreateAppointmentInput) {
     .insert({
       patient_id: input.patientId,
       physiotherapist_id: input.physiotherapistId,
+      clinic_physiotherapist_id: input.clinicPhysiotherapistId,
       modality: input.modality,
       scheduled_at: input.scheduledAt,
       duration_minutes: input.durationMinutes ?? 60,
@@ -100,7 +114,7 @@ export async function createAppointment(input: CreateAppointmentInput) {
     } as Record<string, unknown>)
     .select()
     .single()
-  if (error) throw error
+  if (error) throw mapAppointmentError(error)
   void syncAppointmentToGoogleCalendar(data.id)
   return data
 }
@@ -168,7 +182,7 @@ export async function cancelAppointmentWithReason(id: string, reason: string) {
   return data
 }
 
-export async function getBookedSlots(physiotherapistId: string, date: string) {
+export async function getBookedSlots(clinicPhysiotherapistId: string, date: string) {
   const start = new Date(date)
   start.setHours(0, 0, 0, 0)
   const end = new Date(date)
@@ -177,7 +191,7 @@ export async function getBookedSlots(physiotherapistId: string, date: string) {
   const { data, error } = await supabase
     .from('appointments')
     .select('scheduled_at')
-    .eq('physiotherapist_id', physiotherapistId)
+    .eq('clinic_physiotherapist_id', clinicPhysiotherapistId)
     .gte('scheduled_at', start.toISOString())
     .lte('scheduled_at', end.toISOString())
     .not('status', 'in', '("cancelled","no_show")')
@@ -187,4 +201,98 @@ export async function getBookedSlots(physiotherapistId: string, date: string) {
     const d = new Date(a.scheduled_at)
     return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
   })
+}
+
+function mapAppointmentError(error: { message?: string; code?: string }) {
+  const message = error.message ?? ''
+  if (message.includes('Horário já ocupado') || error.code === '23505') {
+    return new Error('Horário já ocupado para este fisioterapeuta.')
+  }
+  if (message.includes('Informe o fisioterapeuta') || message.includes('não pertence')) {
+    return new Error(message)
+  }
+  return error instanceof Error ? error : new Error(message || 'Não foi possível salvar o agendamento.')
+}
+
+export async function createAppointmentsBatch(input: {
+  practiceId: string
+  patientId: string
+  modality: AppointmentModality
+  notes?: string
+  items: Array<{
+    clinicPhysiotherapistId: string
+    scheduledAt: string
+    durationMinutes: number
+  }>
+}) {
+  await assertPracticeWritable(input.practiceId)
+  if (!input.items.length) throw new Error('Nenhum atendimento para agendar.')
+
+  const { data, error } = await supabase
+    .from('appointments')
+    .insert(
+      input.items.map((item) => ({
+        patient_id: input.patientId,
+        physiotherapist_id: input.practiceId,
+        clinic_physiotherapist_id: item.clinicPhysiotherapistId,
+        modality: input.modality,
+        scheduled_at: item.scheduledAt,
+        duration_minutes: item.durationMinutes,
+        notes: input.notes ?? null,
+        status: 'scheduled',
+      })),
+    )
+    .select('id')
+
+  if (error) throw mapAppointmentError(error)
+  return data ?? []
+}
+
+export async function getStaffBusyIntervals(
+  clinicPhysiotherapistIds: string[],
+  fromDate: string,
+  toDate: string,
+) {
+  if (!clinicPhysiotherapistIds.length) return []
+  const start = new Date(`${fromDate}T00:00:00`)
+  const end = new Date(`${toDate}T23:59:59`)
+
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('clinic_physiotherapist_id, scheduled_at, duration_minutes')
+    .in('clinic_physiotherapist_id', clinicPhysiotherapistIds)
+    .gte('scheduled_at', start.toISOString())
+    .lte('scheduled_at', end.toISOString())
+    .not('status', 'in', '("cancelled","no_show")')
+
+  if (error) throw error
+  return ((data ?? []) as Array<{
+    clinic_physiotherapist_id: string | null
+    scheduled_at: string
+    duration_minutes: number
+  }>).flatMap((row) => {
+    if (!row.clinic_physiotherapist_id) return []
+    const startAt = new Date(row.scheduled_at)
+    return [{
+      clinicPhysiotherapistId: row.clinic_physiotherapist_id,
+      start: startAt,
+      end: new Date(startAt.getTime() + row.duration_minutes * 60_000),
+    }]
+  })
+}
+
+export async function listPatientAttendance(patientId: string) {
+  const appointments = await getAppointments({ patientId })
+  return appointments.filter((item) => HISTORY_STATUSES.includes(item.status))
+}
+
+export async function listStaffAttendance(clinicPhysiotherapistId: string) {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select(APPOINTMENT_SELECT)
+    .eq('clinic_physiotherapist_id', clinicPhysiotherapistId)
+    .in('status', HISTORY_STATUSES)
+    .order('scheduled_at', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as AppointmentWithRelations[]
 }

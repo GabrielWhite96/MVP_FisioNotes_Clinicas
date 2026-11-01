@@ -1,6 +1,6 @@
 import { Document, Page, StyleSheet, Text, View, pdf } from '@react-pdf/renderer'
 import { pt } from '@/shared/config/i18n/pt'
-import { formatDate } from '@/shared/lib/dates'
+import { formatDate, formatDateTime } from '@/shared/lib/dates'
 
 const styles = StyleSheet.create({
   page: {
@@ -50,13 +50,19 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e2e8f0',
     paddingVertical: 6,
   },
-  colName: { width: '46%', paddingRight: 8 },
-  colStart: { width: '27%' },
-  colEnd: { width: '27%' },
+  colName: { width: '34%', paddingRight: 8 },
+  colPeriod: { width: '24%' },
+  colDays: { width: '22%' },
+  colTimes: { width: '20%' },
   header: {
     fontSize: 7,
     color: '#64748b',
     textTransform: 'uppercase',
+  },
+  session: {
+    color: '#475569',
+    fontSize: 8,
+    marginBottom: 2,
   },
 })
 
@@ -65,6 +71,10 @@ export type AssignmentReportRow = {
   name: string
   startedOn: string
   endedOn: string | null
+  weekdayLabel: string
+  timesLabel: string
+  sessionCount: number
+  sessions: Array<{ id: string; scheduledAt: string }>
 }
 
 export type AssignmentReportPdfProps = {
@@ -85,7 +95,7 @@ function fileSlug(value: string) {
 }
 
 export function assignmentReportFileName(kind: 'patient' | 'staff', name: string, issuedAt = new Date()) {
-  const prefix = kind === 'patient' ? 'vinculos-paciente' : 'vinculos-fisioterapeuta'
+  const prefix = kind === 'patient' ? 'atendimentos-paciente' : 'atendimentos-fisioterapeuta'
   return `${prefix}-${fileSlug(name)}-${issuedAt.toISOString().slice(0, 10)}.pdf`
 }
 
@@ -98,7 +108,7 @@ export function AssignmentReportPdf({
 }: AssignmentReportPdfProps) {
   const copy = pt.clinic
   const title = kind === 'patient' ? copy.patientLinksReport : copy.staffLinksReport
-  const nameHeader = kind === 'patient' ? pt.clinic.responsible : pt.physio.patients
+  const nameHeader = kind === 'patient' ? pt.clinic.sessionTherapist : pt.physio.patients
 
   return (
     <Document>
@@ -114,14 +124,25 @@ export function AssignmentReportPdf({
         <Text style={styles.sectionTitle}>{copy.assignmentHistory}</Text>
         <View style={styles.row}>
           <Text style={[styles.colName, styles.header]}>{nameHeader}</Text>
-          <Text style={[styles.colStart, styles.header]}>{copy.startDate}</Text>
-          <Text style={[styles.colEnd, styles.header]}>{copy.endDate}</Text>
+          <Text style={[styles.colPeriod, styles.header]}>{copy.attendancePeriod}</Text>
+          <Text style={[styles.colDays, styles.header]}>{copy.weekdays}</Text>
+          <Text style={[styles.colTimes, styles.header]}>{copy.sessionTime}</Text>
         </View>
         {rows.length ? rows.map((row) => (
-          <View key={row.id} style={styles.row}>
-            <Text style={styles.colName}>{row.name}</Text>
-            <Text style={styles.colStart}>{formatDate(row.startedOn)}</Text>
-            <Text style={styles.colEnd}>{row.endedOn ? formatDate(row.endedOn) : copy.ongoing}</Text>
+          <View key={row.id}>
+            <View style={styles.row}>
+              <Text style={styles.colName}>{row.name} ({row.sessionCount})</Text>
+              <Text style={styles.colPeriod}>
+                {formatDate(row.startedOn)} — {row.endedOn ? formatDate(row.endedOn) : copy.ongoing}
+              </Text>
+              <Text style={styles.colDays}>{row.weekdayLabel}</Text>
+              <Text style={styles.colTimes}>{row.timesLabel}</Text>
+            </View>
+            {row.sessions.map((session) => (
+              <Text key={session.id} style={styles.session}>
+                {formatDateTime(session.scheduledAt)}
+              </Text>
+            ))}
           </View>
         )) : (
           <Text style={styles.muted}>{copy.emptyAssignments}</Text>

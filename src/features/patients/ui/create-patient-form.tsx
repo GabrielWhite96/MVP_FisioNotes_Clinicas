@@ -1,11 +1,9 @@
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { createPatientForPhysio } from '@/entities/patient/api/patient-api'
-import { assignPatientTherapist } from '@/entities/patient-assignment/api/patient-assignment-api'
-import { listClinicPhysiotherapists } from '@/entities/clinic-physiotherapist/api/clinic-physiotherapist-api'
 import { createPatientInvite } from '@/entities/patient/api/patient-invite-api'
 import { sendInviteEmail } from '@/entities/notification/api/invite-email-api'
 import { useAuth } from '@/features/auth/hooks/use-auth'
@@ -26,7 +24,6 @@ const schema = z.object({
   city: z.string().optional(),
   province: z.string().optional(),
   postalCode: z.string().optional(),
-  clinicPhysiotherapistId: z.string().min(1, pt.clinic.responsibleRequired),
 })
 
 type FormData = z.infer<typeof schema>
@@ -35,11 +32,6 @@ export function CreatePatientForm({ physiotherapistId }: { physiotherapistId: st
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuth()
-  const staffQuery = useQuery({
-    queryKey: queryKeys.clinicPhysiotherapists(physiotherapistId),
-    queryFn: () => listClinicPhysiotherapists(physiotherapistId, { activeOnly: true }),
-    enabled: !!physiotherapistId,
-  })
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
@@ -56,10 +48,6 @@ export function CreatePatientForm({ physiotherapistId }: { physiotherapistId: st
         city: data.city || null,
         province: data.province || null,
         postalCode: data.postalCode || null,
-      })
-      await assignPatientTherapist({
-        patientId: patient.id,
-        clinicPhysiotherapistId: data.clinicPhysiotherapistId,
       })
       const email = data.email?.trim()
       if (!email || !user) return { patient, inviteSent: undefined as boolean | undefined }
@@ -80,7 +68,7 @@ export function CreatePatientForm({ physiotherapistId }: { physiotherapistId: st
       queryClient.invalidateQueries({ queryKey: queryKeys.physioPatients(physiotherapistId) })
       queryClient.invalidateQueries({ queryKey: queryKeys.physioPatientStats(physiotherapistId) })
       queryClient.invalidateQueries({ queryKey: queryKeys.patientInvites(patient.id) })
-      navigate(ROUTES.physio.patient(patient.id), { state: { inviteSent } })
+      navigate(`${ROUTES.physio.appointmentNew}?patientId=${patient.id}`, { state: { inviteSent } })
     },
   })
 
@@ -95,32 +83,6 @@ export function CreatePatientForm({ physiotherapistId }: { physiotherapistId: st
             <Label>Nome completo *</Label>
             <Input {...register('fullName')} />
             {errors.fullName && <p className="text-sm text-red-600">{errors.fullName.message}</p>}
-          </div>
-          <div className="space-y-2">
-            <Label>{pt.clinic.responsible} *</Label>
-            {(staffQuery.data ?? []).length ? (
-              <Select
-                value={watch('clinicPhysiotherapistId') || undefined}
-                onValueChange={(value) => setValue('clinicPhysiotherapistId', value, { shouldValidate: true })}
-              >
-                <SelectTrigger><SelectValue placeholder={pt.common.select} /></SelectTrigger>
-                <SelectContent>
-                  {(staffQuery.data ?? []).map((staff) => (
-                    <SelectItem key={staff.id} value={staff.id}>{staff.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <p className="text-sm text-[var(--color-muted-foreground)]">
-                {pt.clinic.noStaffForPatient}{' '}
-                <Link to={ROUTES.physio.staffNew} className="text-[var(--color-primary)] hover:underline">
-                  {pt.clinic.newStaff}
-                </Link>
-              </p>
-            )}
-            {errors.clinicPhysiotherapistId && (
-              <p className="text-sm text-red-600">{errors.clinicPhysiotherapistId.message}</p>
-            )}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -164,7 +126,7 @@ export function CreatePatientForm({ physiotherapistId }: { physiotherapistId: st
             </div>
           </div>
           {mutation.error && <p className="text-sm text-red-600">{(mutation.error as Error).message}</p>}
-          <Button type="submit" disabled={mutation.isPending || !(staffQuery.data ?? []).length}>
+          <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? pt.common.loading : pt.physio.createPatient}
           </Button>
         </form>

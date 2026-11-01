@@ -13,6 +13,7 @@ interface AppointmentItem {
   status: string
   scheduled_at: string
   physiotherapist?: { profiles?: { full_name: string } | null } | null
+  clinic_physiotherapist?: { full_name?: string | null } | null
   patient?: {
     full_name?: string | null
     profiles?: { full_name: string } | null
@@ -60,8 +61,11 @@ export function AppointmentList({
             <p className="font-display text-lg font-semibold">{formatDateTime(a.scheduled_at)}</p>
             <p className="text-sm text-[var(--color-muted-foreground)]">
               {role === 'patient'
-                ? a.physiotherapist?.profiles?.full_name
-                : (a.patient?.full_name ?? a.patient?.profiles?.full_name)}
+                ? (a.clinic_physiotherapist?.full_name ?? a.physiotherapist?.profiles?.full_name)
+                : [
+                    a.patient?.full_name ?? a.patient?.profiles?.full_name,
+                    a.clinic_physiotherapist?.full_name,
+                  ].filter(Boolean).join(' · ')}
             </p>
             <div className="mt-1 flex gap-2">
               <Badge variant="secondary">{MODALITY_LABELS[a.modality]}</Badge>

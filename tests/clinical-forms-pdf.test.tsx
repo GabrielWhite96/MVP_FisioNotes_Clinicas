@@ -19,8 +19,26 @@ describe('clinic printable PDFs', () => {
 
   it('renders assignment reports for patient and staff', async () => {
     const rows = [
-      { id: '1', name: 'Ana Souza', startedOn: '2026-01-10', endedOn: '2026-03-15' },
-      { id: '2', name: 'Ana Souza', startedOn: '2026-03-15', endedOn: null },
+      {
+        id: '1',
+        name: 'Ana Souza',
+        startedOn: '2026-01-10',
+        endedOn: '2026-03-15',
+        weekdayLabel: 'Ter',
+        timesLabel: '09:00',
+        sessionCount: 8,
+        sessions: [{ id: 's1', scheduledAt: '2026-01-13T12:00:00.000Z' }],
+      },
+      {
+        id: '2',
+        name: 'Ana Souza',
+        startedOn: '2026-03-15',
+        endedOn: null,
+        weekdayLabel: 'Qui',
+        timesLabel: '14:00',
+        sessionCount: 4,
+        sessions: [{ id: 's2', scheduledAt: '2026-03-19T17:00:00.000Z' }],
+      },
     ]
     const patientPdf = await renderToBuffer(
       <AssignmentReportPdf
@@ -37,12 +55,21 @@ describe('clinic printable PDFs', () => {
         subjectName="Ana Souza"
         periodLabel="Últimos 30 dias"
         issuedAt="31/10/2026"
-        rows={[{ id: '1', name: 'João Lima', startedOn: '2026-03-15', endedOn: null }]}
+        rows={[{
+          id: '1',
+          name: 'João Lima',
+          startedOn: '2026-03-15',
+          endedOn: null,
+          weekdayLabel: 'Ter',
+          timesLabel: '09:00',
+          sessionCount: 2,
+          sessions: [{ id: 's1', scheduledAt: '2026-03-17T12:00:00.000Z' }],
+        }]}
       />,
     )
     expect(patientPdf.byteLength).toBeGreaterThan(100)
     expect(staffPdf.byteLength).toBeGreaterThan(100)
     expect(assignmentReportFileName('patient', 'João Lima', new Date('2026-10-31T12:00:00.000Z')))
-      .toMatch(/^vinculos-paciente-joao-lima-2026-10-31\.pdf$/)
+      .toMatch(/^atendimentos-paciente-joao-lima-2026-10-31\.pdf$/)
   })
 })

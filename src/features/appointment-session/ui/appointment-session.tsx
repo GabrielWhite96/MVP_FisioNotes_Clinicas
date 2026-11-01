@@ -28,6 +28,7 @@ interface AppointmentSessionProps {
     price_cents?: number | null
     patient?: { profiles?: { full_name: string } | null; address_line1?: string | null; city?: string | null; province?: string | null } | null
     physiotherapist?: { profiles?: { full_name: string } | null } | null
+    clinic_physiotherapist?: { full_name?: string | null } | null
   }
   role: 'patient' | 'physiotherapist'
 }
@@ -128,7 +129,9 @@ export function AppointmentSession({ appointment, role }: AppointmentSessionProp
   }
 
   const patientName = appointment.patient?.profiles?.full_name ?? 'Paciente'
-  const physioName = appointment.physiotherapist?.profiles?.full_name ?? 'Fisioterapeuta'
+  const physioName = appointment.clinic_physiotherapist?.full_name
+    ?? appointment.physiotherapist?.profiles?.full_name
+    ?? 'Fisioterapeuta'
   const sessionStatus = sessionQuery.data?.status
 
   return (
