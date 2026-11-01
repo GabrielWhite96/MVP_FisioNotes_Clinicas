@@ -1,0 +1,2 @@
+-- Run migrations 001-007 via supabase db push
+-- Optional dev seed is in migrations/007_seed_dev.sql

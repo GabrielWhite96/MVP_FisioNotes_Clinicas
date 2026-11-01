@@ -1,0 +1,12 @@
+/**
+ * Integration tests against Supabase local instance.
+ *
+ * Setup:
+ *   supabase start
+ *   supabase db reset
+ *   npm run test:integration
+ *
+ * Add test files here when running against local Supabase.
+ */
+
+export {}

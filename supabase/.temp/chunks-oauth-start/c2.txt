@@ -1,0 +1,121 @@
+rofiles?: { full_name?: string | null } | null;
+  } | null;
+};
+
+function buildEventBody(appointment: AppointmentRow, timeZone: string) {
+  const patientName =
+    appointment.patient?.full_name ??
+    appointment.patient?.profiles?.full_name ??
+    "Paciente";
+  const start = new Date(appointment.scheduled_at);
+  const end = new Date(start.getTime() + (appointment.duration_minutes || 60) * 60_000);
+  const appUrl = getAppUrl();
+  const modality = MODALITY_LABELS[appointment.modality] ?? appointment.modality;
+
+  return {
+    summary: `Consulta TeleFisio — ${firstName(patientName)}`,
+    description: [
+      modality,
+      `Abrir no TeleFisio: ${appUrl}/physio/appointments/${appointment.id}`,
+    ].join("\n"),
+    start: { dateTime: start.toISOString(), timeZone },
+    end: { dateTime: end.toISOString(), timeZone },
+    location:
+      appointment.modality === "home_visit"
+        ? appointment.home_address ?? undefined
+        : "Online",
+    reminders: { useDefault: true },
+  };
+}
+
+async function markSync(
+  admin: SupabaseClient,
+  appointmentId: string,
+  patch: Record<string, unknown>
+) {
+  await admin.from("appointment_google_events").upsert(
+    {
+      appointment_id: appointmentId,
+      updated_at: new Date().toISOString(),
+      ...patch,
+    },
+    { onConflict: "appointment_id" }
+  );
+}
+
+export async function syncAppointmentToGoogle(
+  admin: SupabaseClient,
+  appointmentId: string,
+  options?: { forceDelete?: boolean }
+): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  const { data: appointment, error } = await admin
+    .from("appointments")
+    .select(`
+      id, physiotherapist_id, modality, status, scheduled_at, duration_minutes, home_address,
+      patient:patients(full_name, profiles:profiles(full_name))
+    `)
+    .eq("id", appointmentId)
+    .single();
+
+  if (error || !appointment) {
+    return { ok: false, error: "Appointment not found" };
+  }
+
+  const appt = appointment as AppointmentRow;
+  const tokens = await getValidAccessToken(admin, appt.physiotherapist_id);
+  if (!tokens) return { ok: true, skipped: true };
+
+  const { data: mapping } = await admin
+    .from("appointment_google_events")
+    .select("google_event_id, google_calendar_id")
+    .eq("appointment_id", appointmentId)
+    .maybeSingle();
+
+  const shouldDelete =
+    options?.forceDelete ||
+    appt.status === "cancelled" ||
+    appt.status === "no_show";
+
+  const calendarId = encodeURIComponent(tokens.calendarId || "primary");
+  const headers = {
+    Authorization: `Bearer ${tokens.accessToken}`,
+    "Content-Type": "application/json",
+  };
+
+  try {
+    if (shouldDelete) {
+      if (mapping?.google_event_id) {
+        const delRes = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${mapping.google_event_id}`,
+          { method: "DELETE", headers }
+        );
+        if (!delRes.ok && delRes.status !== 404 && delRes.status !== 410) {
+          const errBody = await delRes.text();
+          throw new Error(errBody || `Google delete failed (${delRes.status})`);
+        }
+        await admin.from("appointment_google_events").delete().eq("appointment_id", appointmentId);
+      }
+      return { ok: true };
+    }
+
+    const { data: physio } = await admin
+      .from("physiotherapists")
+      .select("profiles:profiles(timezone)")
+      .eq("id", appt.physiotherapist_id)
+      .single();
+    const timeZone =
+      (physio as { profiles?: { timezone?: string } | null } | null)?.profiles?.timezone ??
+      "America/Edmonton";
+
+    const body = buildEventBody(appt, timeZone);
+
+    if (mapping?.google_event_id) {
+      const patchRes = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${mapping.google_event_id}`,
+        { method: "PATCH", headers, body: JSON.stringify(body) }
+      );
+      if (!patchRes.ok) {
+        const errBody = await patchRes.text();
+        throw new Error(errBody || `Google update failed (${patchRes.status})`);
+      }
+     

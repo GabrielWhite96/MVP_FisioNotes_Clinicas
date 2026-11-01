@@ -1,0 +1,81 @@
+import type { ClinicalTool } from '../types'
+
+const templateSource = {
+  type: 'institution' as const,
+  citation: 'Fisionotes. Modelo autoral alinhado à estrutura do prontuário do sistema. Não é instrumento validado e não grava dados no prontuário.',
+  year: 2026,
+}
+
+export const templateTools: ClinicalTool[] = [
+  {
+    id: 'ficha-avaliacao-inicial',
+    slug: 'ficha-avaliacao-inicial',
+    kind: 'professional_template',
+    name: 'Ficha de avaliação inicial',
+    shortDescription: 'Roteiro para não esquecer os blocos da primeira avaliação.',
+    purpose: 'Organizar a avaliação inicial com os mesmos blocos que o prontuário já usa.',
+    categoryId: 'professional_templates',
+    subcategoryId: 'avaliacao',
+    specialties: ['musculoesqueletica', 'ortopedia', 'neurologia', 'geriatria', 'respiratoria'],
+    bodyRegions: ['Corpo inteiro'],
+    clinicalPurposes: ['triagem'],
+    searchTerms: ['ficha', 'avaliação', 'anamnese', 'exame'],
+    reviewStatus: 'product_template',
+    populations: ['Atendimento ambulatorial de fisioterapia. Não cobre toda especialidade.'],
+    limitations: [
+      'Não é um questionário validado e não gera escore.',
+      'Preencher esta ficha não grava o prontuário. O registro continua na avaliação do paciente.',
+    ],
+    license: {
+      status: 'product_original',
+      notes: 'Texto autoral do Fisio, livre para uso dentro do atendimento.',
+    },
+    professionalJudgment: true,
+    relatedToolIds: ['goniometria', 'forca-muscular-mrc', 'checklist-atendimento'],
+    sources: [templateSource],
+    steps: [
+      'Identificação, queixa principal e o que a pessoa espera do tratamento.',
+      'História: início, comportamento da dor, limitações e o que já foi tentado.',
+      'Exame: postura, marcha, amplitude, força, testes especiais que a hipótese pedir e equilíbrio, se a queixa envolver queda ou instabilidade.',
+      'Achados que sustentam a hipótese e os que faltam.',
+      'Plano: objetivo, frequência proposta e o que será reavaliado na próxima vez.',
+    ],
+    interpretation: 'Use a ficha como lista de presença dos blocos. O conteúdo clínico vem do exame, não do modelo.',
+  },
+  {
+    id: 'checklist-atendimento',
+    slug: 'checklist-atendimento',
+    kind: 'professional_template',
+    name: 'Checklist de atendimento',
+    shortDescription: 'Itens para revisar durante a sessão, do consentimento ao plano da próxima.',
+    purpose: 'Reduzir omissão no meio da consulta, sem substituir a evolução.',
+    categoryId: 'professional_templates',
+    subcategoryId: 'atendimento',
+    specialties: ['musculoesqueletica', 'ortopedia', 'neurologia', 'geriatria'],
+    bodyRegions: ['Corpo inteiro'],
+    clinicalPurposes: ['triagem', 'reabilitacao'],
+    searchTerms: ['checklist', 'sessão', 'consulta', 'evolução'],
+    reviewStatus: 'product_template',
+    populations: ['Sessão de fisioterapia ambulatorial.'],
+    limitations: [
+      'Não é escala e não pontua qualidade do atendimento.',
+      'Não grava a evolução. O texto clínico continua no prontuário.',
+    ],
+    license: {
+      status: 'product_original',
+      notes: 'Modelo autoral do Fisio.',
+    },
+    professionalJudgment: true,
+    relatedToolIds: ['ficha-avaliacao-inicial', 'red-flags-lombar', 'nprs'],
+    sources: [templateSource],
+    steps: [
+      'Confirme o consentimento para o que será feito na sessão.',
+      'Pergunte a dor ou o sintoma principal de hoje e compare com o último registro.',
+      'Reavalie o achado que guia o tratamento, com o mesmo teste de antes.',
+      'Aplique a conduta e observe a resposta imediata.',
+      'Revise o exercício para casa e se a pessoa conseguiu fazê-lo.',
+      'Procure sinal de alerta novo. Se aparecer, interrompa a progressão e encaminhe.',
+      'Feche o que muda na próxima sessão.',
+    ],
+  },
+]

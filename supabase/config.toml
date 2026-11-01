@@ -1,0 +1,75 @@
+# A string used to distinguish different Supabase projects on the same host.
+project_id = "qdfvhamkbfniepilqhqt"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173/**", "https://tele-fisio.netlify.app/**"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[auth.email.template.recovery]
+subject = "Redefinir senha do Fisionotes"
+content_path = "./templates/recovery.html"
+
+[auth.email.template.confirmation]
+subject = "Confirme seu e-mail no Fisionotes"
+content_path = "./templates/confirmation.html"
+
+[auth.email.template.magic_link]
+subject = "Seu link para entrar no Fisionotes"
+content_path = "./templates/magic_link.html"
+
+[auth.email.template.invite]
+subject = "Convite para o Fisionotes"
+content_path = "./templates/invite.html"
+
+[auth.email.template.email_change]
+subject = "Confirme seu novo e-mail no Fisionotes"
+content_path = "./templates/email_change.html"
+
+[auth.email.template.reauthentication]
+subject = "Código para confirmar que é você"
+content_path = "./templates/reauthentication.html"
+
+[auth.email.notification.password_changed]
+enabled = true
+subject = "Sua senha do Fisionotes foi alterada"
+content_path = "./templates/password_changed.html"
+
+[auth.email.notification.email_changed]
+enabled = true
+subject = "Seu e-mail do Fisionotes foi alterado"
+content_path = "./templates/email_changed.html"
+
+[functions.google-calendar-oauth-callback]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.create-saas-checkout]
+verify_jwt = false
+
+[functions.send-reminders]
+verify_jwt = false
